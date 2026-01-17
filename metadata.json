@@ -1,0 +1,7 @@
+{
+  "name": "Copy of CalorieAI",
+  "description": "An AI-powered meal tracking application that identifies food from photos and calculates nutritional information.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
