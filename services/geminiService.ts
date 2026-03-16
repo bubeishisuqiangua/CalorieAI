@@ -3,7 +3,21 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { MealAnalysis } from "../types";
 
 export const analyzeFoodImage = async (base64Image: string): Promise<MealAnalysis> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.API_KEY || process.env.GEMINI_API_KEY;
+  
+  if (!apiKey || apiKey === 'PLACEHOLDER_API_KEY' || apiKey === '') {
+    console.error("Gemini API Key is missing! Please set GEMINI_API_KEY in your environment variables.");
+    return {
+      name: "API Key Missing",
+      totalCalories: 0,
+      protein: 0,
+      carbs: 0,
+      fats: 0,
+      ingredients: []
+    };
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
   
   try {
     const response = await ai.models.generateContent({
