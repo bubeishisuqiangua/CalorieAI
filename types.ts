@@ -1,6 +1,7 @@
 
 export enum AppScreen {
   SPLASH = 'SPLASH',
+  ONBOARDING = 'ONBOARDING',
   DASHBOARD = 'DASHBOARD',
   CAMERA = 'CAMERA',
   ANALYSIS = 'ANALYSIS',
@@ -15,9 +16,9 @@ export type Gender = 'male' | 'female';
 export interface UserProfile {
   name: string;
   avatar: string;
-  weight: number;
-  height: number;
-  age: number;
+  weight: number | '';
+  height: number | '';
+  age: number | '';
   gender: Gender;
   activityLevel: number; // e.g., 1.2, 1.375, 1.55
 }
@@ -39,10 +40,8 @@ export interface MealAnalysis {
   imageUrl?: string;
 }
 
-export interface MealHistoryItem {
+export interface MealHistoryItem extends MealAnalysis {
   id: string;
-  name: string;
-  calories: number;
   time: string;
   image: string;
   status: 'AI RECOGNIZED' | 'VERIFIED';

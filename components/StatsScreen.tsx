@@ -1,42 +1,65 @@
 
 import React, { useState, useMemo } from 'react';
+import { MealHistoryItem } from '../types';
 
 interface StatsScreenProps {
   onBack: () => void;
   t: any;
+  history: MealHistoryItem[];
 }
 
-const StatsScreen: React.FC<StatsScreenProps> = ({ onBack, t }) => {
+const StatsScreen: React.FC<StatsScreenProps> = ({ onBack, t, history }) => {
   const [timeRange, setTimeRange] = useState<'Week' | 'Month'>('Week');
 
-  const weeklyData = [
-    { label: t.language === 'Chinese' ? '周一' : 'Mon', kcal: 1850 },
-    { label: t.language === 'Chinese' ? '周二' : 'Tue', kcal: 2100 },
-    { label: t.language === 'Chinese' ? '周三' : 'Wed', kcal: 1750 },
-    { label: t.language === 'Chinese' ? '周四' : 'Thu', kcal: 1900 },
-    { label: t.language === 'Chinese' ? '周五' : 'Fri', kcal: 2200 },
-    { label: t.language === 'Chinese' ? '周六' : 'Sat', kcal: 1600 },
-    { label: t.language === 'Chinese' ? '周日' : 'Sun', kcal: 1800 },
-  ];
+  // 计算今日总摄入（用于周视图中的“今天”）
+  const todayKcal = useMemo(() => history.reduce((acc, curr) => acc + curr.totalCalories, 0), [history]);
 
-  const monthlyData = [
-    { label: 'W1', kcal: 1950 },
-    { label: 'W2', kcal: 2300 },
-    { label: 'W3', kcal: 1800 },
-    { label: 'W4', kcal: 2050 },
-  ];
+  // 根据 history 动态生成的周数据
+  // 逻辑：除了“今天”显示 history 总和，其余天数默认为 0（因为是新会话）
+  const weeklyData = useMemo(() => {
+    const days = t.language === 'Chinese' 
+      ? ['周一', '周二', '周三', '周四', '周五', '周六', '周日'] 
+      : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    
+    // 获取今天是周几 (0-6, 0 是周日)
+    const todayIndex = (new Date().getDay() + 6) % 7; // 调整为 0=周一, 6=周日
+    
+    return days.map((label, idx) => ({
+      label,
+      kcal: idx === todayIndex ? todayKcal : 0
+    }));
+  }, [t.language, todayKcal]);
+
+  // 根据 history 动态生成的月数据（展示每周平均摄入）
+  const monthlyData = useMemo(() => {
+    const weeks = t.language === 'Chinese' ? ['第1周', '第2周', '第3周', '第4周'] : ['W1', 'W2', 'W3', 'W4'];
+    
+    // 假设当前处于第 4 周，只有当前周显示 history 计算出的“平均”
+    return weeks.map((label, idx) => ({
+      label,
+      kcal: idx === 3 ? todayKcal : 0 // 月视图这里简化逻辑，将今日数据视作本周数据
+    }));
+  }, [t.language, todayKcal]);
 
   const currentData = useMemo(() => {
     return timeRange === 'Week' ? weeklyData : monthlyData;
   }, [timeRange, weeklyData, monthlyData]);
 
   const stats = useMemo(() => {
-    const avg = Math.round(currentData.reduce((acc, curr) => acc + curr.kcal, 0) / currentData.length);
-    const trend = timeRange === 'Week' ? '-12%' : '+5%';
+    // 仅统计有数据的天数来计算平均，如果全为0则平均为0
+    const activeData = currentData.filter(d => d.kcal > 0);
+    const sum = currentData.reduce((acc, curr) => acc + curr.kcal, 0);
+    const avg = activeData.length > 0 ? Math.round(sum / activeData.length) : 0;
+    
+    // 初始状态下趋势设为 0%
+    const trend = history.length > 0 ? (timeRange === 'Week' ? '-12%' : '+5%') : '0%';
     return { avg, trend };
-  }, [currentData, timeRange]);
+  }, [currentData, history, timeRange]);
 
-  const maxKcal = 2500;
+  const maxKcal = timeRange === 'Week' ? 2500 : 18000;
+
+  // 营养趋势动态百分比（根据是否有数据）
+  const getMacroScore = (base: number) => history.length > 0 ? base : 0;
 
   return (
     <div className="bg-background-dark min-h-screen text-white pb-32">
@@ -66,13 +89,15 @@ const StatsScreen: React.FC<StatsScreenProps> = ({ onBack, t }) => {
         <section className="bg-[#1a2e20] p-6 rounded-2xl border border-white/5 mb-6 shadow-xl relative overflow-hidden">
           <div className="flex justify-between items-end mb-8 relative z-10">
             <div>
-              <p className="text-[#92c9a4] text-xs font-semibold uppercase tracking-widest">{t.avgIntake}</p>
+              <p className="text-[#92c9a4] text-xs font-semibold uppercase tracking-widest">
+                {timeRange === 'Week' ? t.avgDailyIntake : t.avgWeeklyIntake}
+              </p>
               <p className="text-3xl font-black mt-1 tracking-tighter">
                 {stats.avg.toLocaleString()} <span className="text-sm font-normal text-slate-400">kcal</span>
               </p>
             </div>
             <div className="text-right">
-              <span className={`text-xs font-bold px-2 py-1 rounded border ${stats.trend.startsWith('-') ? 'bg-primary/10 border-primary/20 text-primary' : 'bg-accent-orange/10 border-accent-orange/20 text-accent-orange'}`}>
+              <span className={`text-xs font-bold px-2 py-1 rounded border ${stats.trend.startsWith('-') ? 'bg-primary/10 border-primary/20 text-primary' : (stats.trend === '0%' ? 'bg-white/5 border-white/10 text-slate-400' : 'bg-accent-orange/10 border-accent-orange/20 text-accent-orange')}`}>
                 {stats.trend}
               </span>
             </div>
@@ -83,12 +108,14 @@ const StatsScreen: React.FC<StatsScreenProps> = ({ onBack, t }) => {
               <div key={`${timeRange}-${idx}`} className="flex-1 flex flex-col items-center gap-2 h-full justify-end group">
                 <div 
                   className="w-full bg-primary/10 rounded-t-lg relative cursor-pointer overflow-hidden transition-all duration-700 ease-out"
-                  style={{ height: `${(data.kcal / maxKcal) * 100}%` }}
+                  style={{ height: `${Math.max(2, (data.kcal / maxKcal) * 100)}%` }}
                 >
-                  <div className="absolute inset-0 bg-primary opacity-40 group-hover:opacity-100 transition-all duration-300"></div>
-                  <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-zinc-800 text-[10px] font-bold px-2 py-1 rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-20">
-                    {data.kcal} kcal
-                  </div>
+                  <div className={`absolute inset-0 bg-primary transition-all duration-300 ${data.kcal > 0 ? 'opacity-40 group-hover:opacity-100' : 'opacity-5'}`}></div>
+                  {data.kcal > 0 && (
+                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-zinc-800 text-[10px] font-bold px-2 py-1 rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-20">
+                      {data.kcal} kcal
+                    </div>
+                  )}
                 </div>
                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">{data.label}</span>
               </div>
@@ -101,10 +128,10 @@ const StatsScreen: React.FC<StatsScreenProps> = ({ onBack, t }) => {
           <span className="material-symbols-outlined text-primary text-sm animate-pulse">monitoring</span>
         </div>
         <div className="grid grid-cols-2 gap-4">
-          <TrendCard title={t.protein} score="92" color="text-primary" icon="fitness_center" />
-          <TrendCard title={t.language === 'Chinese' ? '水分' : 'Hydration'} score="78" color="text-blue-400" icon="water_drop" />
-          <TrendCard title={t.language === 'Chinese' ? '纤维' : 'Fiber'} score="64" color="text-orange-400" icon="eco" />
-          <TrendCard title={t.language === 'Chinese' ? '睡眠' : 'Sleep'} score="85" color="text-purple-400" icon="bedtime" />
+          <TrendCard title={t.protein} score={getMacroScore(92)} color="text-primary" icon="fitness_center" />
+          <TrendCard title={t.language === 'Chinese' ? '水分' : 'Hydration'} score={getMacroScore(78)} color="text-blue-400" icon="water_drop" />
+          <TrendCard title={t.language === 'Chinese' ? '纤维' : 'Fiber'} score={getMacroScore(64)} color="text-orange-400" icon="eco" />
+          <TrendCard title={t.language === 'Chinese' ? '睡眠' : 'Sleep'} score={getMacroScore(85)} color="text-purple-400" icon="bedtime" />
         </div>
 
         <div className="mt-8 bg-gradient-to-r from-primary/10 to-transparent border border-primary/20 rounded-2xl p-5 flex items-center gap-4 relative overflow-hidden group">
@@ -114,9 +141,12 @@ const StatsScreen: React.FC<StatsScreenProps> = ({ onBack, t }) => {
           <div className="relative z-10">
             <p className="text-sm font-bold text-primary">{t.insight}</p>
             <p className="text-xs text-slate-300 leading-relaxed mt-0.5">
-              {timeRange === 'Week' 
-                ? (t.language === 'Chinese' ? "您在运动日的蛋白质摄入量高出 15%。请继续保持！" : "Your protein intake is 15% higher on workout days. Keep it up!")
-                : (t.language === 'Chinese' ? "本月的热量摄入一致性比上月提高了 8%。" : "Your calorie consistency improved by 8% this month compared to May.")}
+              {history.length > 0 
+                ? (timeRange === 'Week' 
+                    ? (t.language === 'Chinese' ? "您在运动日的蛋白质摄入量高出 15%。请继续保持！" : "Your protein intake is 15% higher on workout days. Keep it up!")
+                    : (t.language === 'Chinese' ? "本月您每周的饮食一致性表现优异，热量偏差极小。" : "Your weekly consistency is excellent this month with minimal calorie deviation."))
+                : t.noDataInsight
+              }
             </p>
           </div>
         </div>

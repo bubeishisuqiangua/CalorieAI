@@ -17,20 +17,45 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ profile, onUpdateProfile,
 
   const isMetric = settings.units === 'Metric';
   
-  // Convert for display
-  const displayWeight = useMemo(() => isMetric ? profile.weight : Math.round(profile.weight * 2.20462), [profile.weight, isMetric]);
-  const displayHeight = useMemo(() => isMetric ? profile.height : Math.round(profile.height * 0.393701), [profile.height, isMetric]);
+  // Convert for display - using a fallback for empty strings
+  const displayWeight = useMemo(() => {
+    if (profile.weight === '') return '';
+    return isMetric ? profile.weight : Math.round(profile.weight * 2.20462);
+  }, [profile.weight, isMetric]);
 
-  const handleChange = (field: keyof UserProfile, value: any) => {
-    let finalValue = value;
-    // Convert back to metric if saved from imperial input
-    if (field === 'weight' && !isMetric) finalValue = value / 2.20462;
-    if (field === 'height' && !isMetric) finalValue = value / 0.393701;
+  const displayHeight = useMemo(() => {
+    if (profile.height === '') return '';
+    return isMetric ? profile.height : Math.round(profile.height * 0.393701);
+  }, [profile.height, isMetric]);
+
+  const handleChange = (field: keyof UserProfile, value: string) => {
+    let finalValue: any = value;
+    
+    const numericFields: (keyof UserProfile)[] = ['weight', 'height', 'age'];
+    
+    if (numericFields.includes(field)) {
+        if (value === '') {
+            finalValue = '';
+        } else {
+            const num = Number(value);
+            // Convert back to metric if saved from imperial input
+            if (field === 'weight' && !isMetric) finalValue = num / 2.20462;
+            else if (field === 'height' && !isMetric) finalValue = num / 0.393701;
+            else finalValue = num;
+        }
+    }
     
     onUpdateProfile({ ...profile, [field]: finalValue });
   };
 
   const handleAvatarClick = () => fileInputRef.current?.click();
+
+  const handleSave = () => {
+    // Basic validation before exiting: ensure we don't save empty strings to the actual persistence layer if needed
+    // However, App.tsx's sanitized logic or the useEffect save handles persistence.
+    // We'll just trigger the back navigation.
+    onBack();
+  }
 
   return (
     <div className="bg-background-dark min-h-screen text-white pb-32 max-w-md mx-auto flex flex-col">
@@ -56,7 +81,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ profile, onUpdateProfile,
             const file = e.target.files?.[0];
             if (file) {
               const r = new FileReader();
-              r.onload = (ev) => handleChange('avatar', ev.target?.result);
+              r.onload = (ev) => handleChange('avatar', ev.target?.result as string);
               r.readAsDataURL(file);
             }
           }} />
@@ -64,7 +89,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ profile, onUpdateProfile,
 
         <div className="w-full space-y-6">
           <div className="bg-[#193322]/40 p-4 rounded-2xl border border-primary/20">
-            <InputGroup label={t.nickname} value={profile.name} onChange={(v: any) => handleChange('name', v)} type="text" />
+            <InputGroup label={t.nickname} value={profile.name} onChange={(v: string) => handleChange('name', v)} type="text" />
           </div>
 
           <div className="bg-[#1a2e20] p-6 rounded-2xl border border-white/5 w-full text-center">
@@ -75,12 +100,12 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ profile, onUpdateProfile,
 
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
-              <InputGroup label={`${t.weight} (${isMetric ? 'kg' : 'lbs'})`} value={displayWeight} onChange={(v: any) => handleChange('weight', Number(v))} type="number" />
-              <InputGroup label={`${t.height} (${isMetric ? 'cm' : 'in'})`} value={displayHeight} onChange={(v: any) => handleChange('height', Number(v))} type="number" />
+              <InputGroup label={`${t.weight} (${isMetric ? 'kg' : 'lbs'})`} value={displayWeight} onChange={(v: string) => handleChange('weight', v)} type="number" />
+              <InputGroup label={`${t.height} (${isMetric ? 'cm' : 'in'})`} value={displayHeight} onChange={(v: string) => handleChange('height', v)} type="number" />
             </div>
             
             <div className="grid grid-cols-2 gap-4">
-              <InputGroup label={t.age} value={profile.age} onChange={(v: any) => handleChange('age', Number(v))} type="number" />
+              <InputGroup label={t.age} value={profile.age} onChange={(v: string) => handleChange('age', v)} type="number" />
               <div className="flex flex-col gap-2">
                 <p className="text-xs font-bold text-[#92c9a4] uppercase px-1">{t.gender}</p>
                 <div className="flex bg-[#193322] rounded-xl p-1 border border-white/5">
@@ -92,7 +117,8 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ profile, onUpdateProfile,
 
             <div className="flex flex-col gap-2">
               <p className="text-xs font-bold text-[#92c9a4] uppercase px-1">{t.activityLevel}</p>
-              <select value={profile.activityLevel} onChange={(e) => handleChange('activityLevel', Number(e.target.value))} className="w-full bg-[#193322] border-white/5 rounded-xl text-white p-4">
+              {/* Fix: use onUpdateProfile from props instead of non-existent setProfile */}
+              <select value={profile.activityLevel} onChange={(e) => onUpdateProfile({ ...profile, activityLevel: Number(e.target.value) })} className="w-full bg-[#193322] border-white/5 rounded-xl text-white p-4">
                 <option value={1.2}>Sedentary</option>
                 <option value={1.375}>Light</option>
                 <option value={1.55}>Moderate</option>
@@ -104,7 +130,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ profile, onUpdateProfile,
       </section>
 
       <section className="px-4 py-8">
-        <button onClick={onBack} className="w-full py-4 bg-primary text-background-dark font-black rounded-xl uppercase tracking-widest">{t.saveChanges}</button>
+        <button onClick={handleSave} className="w-full py-4 bg-primary text-background-dark font-black rounded-xl uppercase tracking-widest">{t.saveChanges}</button>
       </section>
     </div>
   );
@@ -113,7 +139,12 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ profile, onUpdateProfile,
 const InputGroup = ({ label, value, onChange, type }: any) => (
   <div className="flex flex-col gap-2">
     <label className="text-xs font-bold text-[#92c9a4] uppercase px-1">{label}</label>
-    <input type={type} value={value} onChange={(e) => onChange(e.target.value)} className="bg-[#193322] border border-white/5 rounded-xl p-4 text-white outline-none" />
+    <input 
+      type={type} 
+      value={value} 
+      onChange={(e) => onChange(e.target.value)} 
+      className="bg-[#193322] border border-white/5 rounded-xl p-4 text-white outline-none" 
+    />
   </div>
 );
 

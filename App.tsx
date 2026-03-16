@@ -1,6 +1,7 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { AppScreen, MealAnalysis, MealHistoryItem, MealPlan, UserProfile } from './types';
+import { storageService } from './services/storageService';
 import SplashScreen from './components/SplashScreen';
 import Dashboard from './components/Dashboard';
 import CameraScreen from './components/CameraScreen';
@@ -9,6 +10,7 @@ import ProfileScreen from './components/ProfileScreen';
 import StatsScreen from './components/StatsScreen';
 import PlansScreen from './components/PlansScreen';
 import SettingsScreen from './components/SettingsScreen';
+import OnboardingScreen from './components/OnboardingScreen';
 import Navbar from './components/Navbar';
 
 // Localization Dictionary
@@ -63,13 +65,37 @@ const translations: any = {
     totalCalories: "Total Estimated Calories",
     addMore: "Add more ingredients",
     myProgress: "My Progress",
-    avgIntake: "Avg. Daily Intake",
+    avgDailyIntake: "Avg. Daily Intake",
+    avgWeeklyIntake: "Avg. Weekly Intake",
     nutrientTrends: "Nutrient Trends",
     insight: "AI Insight",
     smartPlans: "Smart Meal Plans",
     currentPlan: "Current Plan",
     availableOptions: "Available Options",
-    pointCamera: "Point camera at your meal or pick from gallery"
+    pointCamera: "Point camera at your meal or pick from gallery",
+    emptyHistory: "No meals logged yet today.",
+    back: "Back",
+    noDataInsight: "Start logging your meals to see AI-powered trends and insights!",
+    onboardingTitle: "Personalize Your Plan",
+    onboardingDesc: "Help us calculate your calorie goals by providing a few details.",
+    sedentary: "Sedentary",
+    sedentaryDesc: "Office job, little to no exercise",
+    light: "Lightly Active",
+    lightDesc: "Light exercise 1-3 days a week",
+    moderate: "Moderate exercise 3-5 days a week",
+    veryActive: "Very Active",
+    veryActiveDesc: "Heavy exercise 6-7 days a week",
+    finishSetup: "Complete Setup",
+    chooseLanguage: "Choose Your Language",
+    chooseGoal: "What is your goal?",
+    chooseGoalDesc: "We'll tailor your daily targets based on this.",
+    weightLoss: "Weight Loss",
+    weightLossDesc: "Burn fat with a calorie deficit",
+    muscleBuilding: "Muscle Building",
+    muscleBuildingDesc: "Gain mass with high protein",
+    maintenance: "Maintenance",
+    maintenanceDesc: "Keep your current weight",
+    storageError: "Storage error occurred. Please try again.",
   },
   Chinese: {
     dashboard: "主页",
@@ -121,39 +147,102 @@ const translations: any = {
     totalCalories: "总热量估算",
     addMore: "添加更多成分",
     myProgress: "我的进度",
-    avgIntake: "平均每日摄入",
+    avgDailyIntake: "平均每日摄入",
+    avgWeeklyIntake: "每星期平均摄入",
     nutrientTrends: "营养趋势",
     insight: "AI 洞察",
     smartPlans: "智能饮食计划",
     currentPlan: "当前计划",
     availableOptions: "可选方案",
-    pointCamera: "将摄像头对准食物或从相册选择"
+    pointCamera: "将摄像头对准食物或从相册选择",
+    emptyHistory: "今天还没有记录饮食哦",
+    back: "返回",
+    noDataInsight: "开始记录您的饮食，解锁 AI 趋势分析与健康建议！",
+    onboardingTitle: "个性化您的计划",
+    onboardingDesc: "提供一些基本信息，帮助我们计算您的热量目标。",
+    sedentary: "久坐不动",
+    sedentaryDesc: "办公室工作，几乎不运动",
+    light: "轻度活跃",
+    lightDesc: "每周运动 1-3 天",
+    moderate: "中度活跃",
+    moderateDesc: "每周运动 3-5 天",
+    veryActive: "非常活跃",
+    veryActiveDesc: "重体力工作或每天运动",
+    finishSetup: "完成设置",
+    chooseLanguage: "选择语言",
+    chooseGoal: "您的目标是什么？",
+    chooseGoalDesc: "我们将根据您的目标制定每日摄入指标。",
+    weightLoss: "减重",
+    weightLossDesc: "通过热量缺口燃烧脂肪",
+    muscleBuilding: "增肌",
+    muscleBuildingDesc: "通过高蛋白摄入增加肌肉",
+    maintenance: "维持体重",
+    maintenanceDesc: "保持当前体重和状态",
+    storageError: "存储错误，请稍后再试。",
   }
+};
+
+const STORAGE_KEYS = {
+  PROFILE: 'calorie_ai_profile',
+  SETTINGS: 'calorie_ai_settings',
+  ACTIVE_PLAN: 'calorie_ai_active_plan'
 };
 
 const App: React.FC = () => {
   const [currentScreen, setCurrentScreen] = useState<AppScreen>(AppScreen.SPLASH);
   const [analysisResult, setAnalysisResult] = useState<MealAnalysis | null>(null);
+  const [isViewingHistory, setIsViewingHistory] = useState(false);
+  const [mealHistory, setMealHistory] = useState<MealHistoryItem[]>([]);
   
-  const [settings, setSettings] = useState({
-    language: 'Chinese',
-    units: 'Metric',
-    notifications: true
+  const [settings, setSettings] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+    return saved ? JSON.parse(saved) : { language: 'English', units: 'Metric', notifications: true };
+  });
+
+  const [userProfile, setUserProfile] = useState<UserProfile>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.PROFILE);
+    return saved ? JSON.parse(saved) : {
+      name: '', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200&auto=format&fit=crop',
+      weight: 70, height: 170, age: 25, gender: 'male', activityLevel: 1.2
+    };
+  });
+
+  const [activePlanId, setActivePlanId] = useState<string>(() => {
+    return localStorage.getItem(STORAGE_KEYS.ACTIVE_PLAN) || 'weight-loss';
   });
 
   const t = useMemo(() => translations[settings.language] || translations.English, [settings.language]);
 
-  const [userProfile, setUserProfile] = useState<UserProfile>({
-    name: 'Alex Rivera',
-    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200&auto=format&fit=crop',
-    weight: 78, 
-    height: 175, 
-    age: 28,
-    gender: 'male',
-    activityLevel: 1.2
-  });
+  // Load history from Persistent Storage on mount
+  useEffect(() => {
+    const loadHistory = async () => {
+      try {
+        const history = await storageService.getAllMeals();
+        setMealHistory(history);
+      } catch (e) {
+        console.error("Failed to load history:", e);
+      }
+    };
+    loadHistory();
+  }, []);
 
-  const [activePlanId, setActivePlanId] = useState<string>('weight-loss');
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+  }, [settings]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(userProfile));
+  }, [userProfile]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.ACTIVE_PLAN, activePlanId);
+  }, [activePlanId]);
+
+  useEffect(() => {
+    if (userProfile.name) {
+      setCurrentScreen(AppScreen.DASHBOARD);
+    }
+  }, []);
 
   const availablePlans: MealPlan[] = [
     {
@@ -180,83 +269,105 @@ const App: React.FC = () => {
 
   const tdee = useMemo(() => {
     const { weight, height, age, gender, activityLevel } = userProfile;
-    const bmr = gender === 'male'
-      ? (10 * weight) + (6.25 * height) - (5 * age) + 5
-      : (10 * weight) + (6.25 * height) - (5 * age) - 161;
+    const w = Number(weight) || 0;
+    const h = Number(height) || 0;
+    const a = Number(age) || 0;
+    if (w === 0 || h === 0 || a === 0) return 2000;
+    const bmr = gender === 'male' ? (10 * w) + (6.25 * h) - (5 * a) + 5 : (10 * w) + (6.25 * h) - (5 * a) - 161;
     return Math.round(bmr * activityLevel);
   }, [userProfile]);
 
   const activePlan = useMemo(() => {
     const plan = availablePlans.find(p => p.id === activePlanId) || availablePlans[0];
-    return {
-      ...plan,
-      dynamicKcal: tdee + plan.kcalModifier
-    };
-  }, [activePlanId, tdee]);
+    return { ...plan, dynamicKcal: tdee + plan.kcalModifier };
+  }, [activePlanId, tdee, availablePlans]);
 
-  const [mealHistory, setMealHistory] = useState<MealHistoryItem[]>([
-    {
-      id: '1',
-      name: '牛油果吐司',
-      calories: 340,
-      time: '08:30',
-      image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAgHYXIKTK1Y1dqYvv3c1HhNY3Bo-rNWwfAENjPb75BYK4NUYtDQJWEM1eaLmw1dUvjQYSLKtfpcrsvvfhD_K32R0rS7iX10wWHdOuRRBad9rAyi3bA1xgMjcI5mou5K9OPinF8naHVX8caqHyvHN6qHgpi_ziXBnd8qMzZDkBuv5pm0qYbK8vm6uz19YsqDFCpWyfugeWI6-H4IuM1_WJRzEb6tvH4DAgDxEvtNQwCYwjRX-wCx32c2x3diXxjlot2lQ3Z6a43SA',
-      status: 'AI RECOGNIZED'
-    }
-  ]);
+  const handleStart = () => {
+    if (userProfile.name) setCurrentScreen(AppScreen.DASHBOARD);
+    else setCurrentScreen(AppScreen.ONBOARDING);
+  };
 
-  const handleStart = () => setCurrentScreen(AppScreen.DASHBOARD);
-  const handleOpenCamera = () => setCurrentScreen(AppScreen.CAMERA);
+  const handleOnboardingComplete = (profile: UserProfile, planId: string) => {
+    const sanitized = { ...profile, weight: Number(profile.weight) || 0, height: Number(profile.height) || 0, age: Number(profile.age) || 0 };
+    setUserProfile(sanitized);
+    setActivePlanId(planId);
+    setCurrentScreen(AppScreen.DASHBOARD);
+  };
   
-  const handleSignOut = () => setCurrentScreen(AppScreen.SPLASH);
-  const handleClearData = () => setMealHistory([]);
+  const handleOpenCamera = () => setCurrentScreen(AppScreen.CAMERA);
+
+  const handleSignOut = async () => {
+    await storageService.clearAll();
+    localStorage.clear();
+    setMealHistory([]);
+    setUserProfile({
+      name: '', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200&auto=format&fit=crop',
+      weight: 70, height: 170, age: 25, gender: 'male', activityLevel: 1.2
+    });
+    setSettings({ language: 'English', units: 'Metric', notifications: true });
+    setCurrentScreen(AppScreen.SPLASH);
+  };
+
+  const handleClearData = async () => {
+    await storageService.clearAll();
+    setMealHistory([]);
+  };
+
+  const handleMealClick = (meal: MealHistoryItem) => {
+    setAnalysisResult(meal);
+    setIsViewingHistory(true);
+    setCurrentScreen(AppScreen.ANALYSIS);
+  };
+
+  const handleSaveMeal = async (m: MealAnalysis) => {
+    const newItem: MealHistoryItem = {
+      ...m,
+      id: Date.now().toString(),
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+      image: m.imageUrl || 'https://picsum.photos/200',
+      status: 'VERIFIED'
+    };
+    
+    try {
+      await storageService.saveMeal(newItem);
+      setMealHistory(prev => [newItem, ...prev]);
+      setCurrentScreen(AppScreen.DASHBOARD);
+    } catch (e) {
+      alert(t.storageError);
+    }
+  };
 
   const renderScreen = () => {
     const commonProps = { t, settings };
     switch (currentScreen) {
       case AppScreen.SPLASH:
         return <SplashScreen {...commonProps} onStart={handleStart} />;
+      case AppScreen.ONBOARDING:
+        return <OnboardingScreen {...commonProps} onComplete={handleOnboardingComplete} onLanguageSelect={(lang) => setSettings(prev => ({ ...prev, language: lang }))} />;
       case AppScreen.DASHBOARD:
-        return <Dashboard {...commonProps} history={mealHistory} profile={userProfile} onOpenProfile={() => setCurrentScreen(AppScreen.PROFILE)} targetKcal={activePlan.dynamicKcal || 2000} />;
+        return <Dashboard {...commonProps} history={mealHistory} profile={userProfile} onOpenProfile={() => setCurrentScreen(AppScreen.PROFILE)} targetKcal={activePlan.dynamicKcal || 2000} onSelectMeal={handleMealClick} />;
       case AppScreen.CAMERA:
-        return <CameraScreen {...commonProps} onBack={() => setCurrentScreen(AppScreen.DASHBOARD)} onResult={(r) => { setAnalysisResult(r); setCurrentScreen(AppScreen.ANALYSIS); }} />;
+        return <CameraScreen {...commonProps} onBack={() => setCurrentScreen(AppScreen.DASHBOARD)} onResult={(r) => { setAnalysisResult(r); setIsViewingHistory(false); setCurrentScreen(AppScreen.ANALYSIS); }} />;
       case AppScreen.ANALYSIS:
-        return analysisResult ? <AnalysisResults {...commonProps} result={analysisResult} onSave={(m) => {
-          const newItem: MealHistoryItem = {
-            id: Date.now().toString(),
-            name: m.name,
-            calories: m.totalCalories,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
-            image: m.imageUrl || 'https://picsum.photos/200',
-            status: 'VERIFIED'
-          };
-          setMealHistory(prev => [newItem, ...prev]);
-          setCurrentScreen(AppScreen.DASHBOARD);
-        }} onBack={() => setCurrentScreen(AppScreen.CAMERA)} /> : null;
+        return analysisResult ? (
+          <AnalysisResults 
+            {...commonProps} 
+            result={analysisResult} 
+            isViewOnly={isViewingHistory}
+            onSave={handleSaveMeal} 
+            onBack={() => isViewingHistory ? setCurrentScreen(AppScreen.DASHBOARD) : setCurrentScreen(AppScreen.CAMERA)} 
+          />
+        ) : null;
       case AppScreen.PROFILE:
-        return <ProfileScreen 
-          {...commonProps}
-          profile={userProfile} 
-          onUpdateProfile={setUserProfile} 
-          onBack={() => setCurrentScreen(AppScreen.DASHBOARD)} 
-          onOpenSettings={() => setCurrentScreen(AppScreen.SETTINGS)}
-          tdee={tdee} 
-        />;
+        return <ProfileScreen {...commonProps} profile={userProfile} onUpdateProfile={setUserProfile} onBack={() => setCurrentScreen(AppScreen.DASHBOARD)} onOpenSettings={() => setCurrentScreen(AppScreen.SETTINGS)} tdee={tdee} />;
       case AppScreen.SETTINGS:
-        return <SettingsScreen 
-          {...commonProps}
-          onUpdateSettings={setSettings} 
-          onBack={() => setCurrentScreen(AppScreen.PROFILE)} 
-          onSignOut={handleSignOut}
-          onClearData={handleClearData}
-          userProfile={userProfile}
-        />;
+        return <SettingsScreen {...commonProps} onUpdateSettings={setSettings} onBack={() => setCurrentScreen(AppScreen.PROFILE)} onSignOut={handleSignOut} onClearData={handleClearData} userProfile={userProfile} />;
       case AppScreen.STATS:
-        return <StatsScreen {...commonProps} onBack={() => setCurrentScreen(AppScreen.DASHBOARD)} />;
+        return <StatsScreen {...commonProps} history={mealHistory} onBack={() => setCurrentScreen(AppScreen.DASHBOARD)} />;
       case AppScreen.PLANS:
         return <PlansScreen {...commonProps} currentPlan={activePlan} availablePlans={availablePlans} tdee={tdee} onSelectPlanId={setActivePlanId} />;
       default:
-        return <Dashboard {...commonProps} history={mealHistory} profile={userProfile} onOpenProfile={() => setCurrentScreen(AppScreen.PROFILE)} targetKcal={2000} />;
+        return <Dashboard {...commonProps} history={mealHistory} profile={userProfile} onOpenProfile={() => setCurrentScreen(AppScreen.PROFILE)} targetKcal={2000} onSelectMeal={handleMealClick} />;
     }
   };
 

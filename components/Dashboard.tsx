@@ -8,10 +8,15 @@ interface DashboardProps {
   onOpenProfile: () => void;
   targetKcal: number;
   t: any;
+  onSelectMeal: (meal: MealHistoryItem) => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ history, profile, onOpenProfile, targetKcal, t }) => {
-  const consumed = useMemo(() => history.reduce((acc, curr) => acc + curr.calories, 0), [history]);
+const Dashboard: React.FC<DashboardProps> = ({ history, profile, onOpenProfile, targetKcal, t, onSelectMeal }) => {
+  const consumed = useMemo(() => history.reduce((acc, curr) => acc + curr.totalCalories, 0), [history]);
+  const proteinTotal = useMemo(() => history.reduce((acc, curr) => acc + curr.protein, 0), [history]);
+  const carbsTotal = useMemo(() => history.reduce((acc, curr) => acc + curr.carbs, 0), [history]);
+  const fatTotal = useMemo(() => history.reduce((acc, curr) => acc + curr.fats, 0), [history]);
+  
   const remaining = Math.max(0, targetKcal - consumed);
   const progressPercent = Math.min(100, (consumed / targetKcal) * 100);
 
@@ -69,9 +74,9 @@ const Dashboard: React.FC<DashboardProps> = ({ history, profile, onOpenProfile, 
 
         <section className="px-4 py-6">
           <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
-            <MacroCard title={t.protein} icon="fitness_center" value={`${Math.round(consumed * 0.3 / 4)}g`} goal="150g" progress={53} />
-            <MacroCard title={t.carbs} icon="grain" value={`${Math.round(consumed * 0.4 / 4)}g`} goal="200g" progress={60} />
-            <MacroCard title={t.fat} icon="water_drop" value={`${Math.round(consumed * 0.3 / 9)}g`} goal="70g" progress={64} />
+            <MacroCard title={t.protein} icon="fitness_center" value={`${Math.round(proteinTotal)}g`} goal="150g" progress={Math.min(100, (proteinTotal/150)*100)} />
+            <MacroCard title={t.carbs} icon="grain" value={`${Math.round(carbsTotal)}g`} goal="200g" progress={Math.min(100, (carbsTotal/200)*100)} />
+            <MacroCard title={t.fat} icon="water_drop" value={`${Math.round(fatTotal)}g`} goal="70g" progress={Math.min(100, (fatTotal/70)*100)} />
           </div>
         </section>
 
@@ -82,11 +87,11 @@ const Dashboard: React.FC<DashboardProps> = ({ history, profile, onOpenProfile, 
 
         <div className="flex flex-col gap-4 px-4">
           {history.length > 0 ? history.map((meal) => (
-            <MealCard key={meal.id} meal={meal} />
+            <MealCard key={meal.id} meal={meal} onClick={() => onSelectMeal(meal)} />
           )) : (
-            <div className="py-10 text-center text-slate-500">
+            <div className="py-10 text-center text-slate-500 bg-[#193322]/30 rounded-2xl border border-dashed border-[#326744]/40">
               <span className="material-symbols-outlined text-4xl mb-2 opacity-20">restaurant</span>
-              <p>No meals logged yet today.</p>
+              <p className="text-sm">{t.emptyHistory}</p>
             </div>
           )}
         </div>
@@ -111,15 +116,18 @@ const MacroCard: React.FC<{ title: string; icon: string; value: string; goal: st
   </div>
 );
 
-const MealCard: React.FC<{ meal: MealHistoryItem }> = ({ meal }) => (
-  <div className="flex items-stretch justify-between gap-4 rounded-xl bg-[#193322] p-3 border border-[#326744]/20">
+const MealCard: React.FC<{ meal: MealHistoryItem; onClick: () => void }> = ({ meal, onClick }) => (
+  <div 
+    onClick={onClick}
+    className="flex items-stretch justify-between gap-4 rounded-xl bg-[#193322] p-3 border border-[#326744]/20 active:scale-[0.98] transition-transform cursor-pointer"
+  >
     <div className="flex flex-[2_2_0px] flex-col justify-between">
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-1.5">
           <span className="bg-primary/20 text-primary text-[10px] font-bold px-1.5 py-0.5 rounded uppercase">{meal.status}</span>
         </div>
         <p className="text-white text-lg font-bold leading-tight mt-1">{meal.name}</p>
-        <p className="text-[#92c9a4] text-sm font-normal">{meal.calories} kcal • {meal.time}</p>
+        <p className="text-[#92c9a4] text-sm font-normal">{meal.totalCalories} kcal • {meal.time}</p>
       </div>
     </div>
     <div className="w-24 h-24 bg-center bg-no-repeat bg-cover rounded-lg border border-[#326744]/30 overflow-hidden" style={{ backgroundImage: `url("${meal.image}")` }}></div>
